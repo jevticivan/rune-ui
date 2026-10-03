@@ -64,6 +64,15 @@ local bx, by, bw, bh = M.ScreenBox(D)
 check("follows: box takes the parent's size", near(bw, 50 * 0.72) and near(bx + bw / 2, dx))
 local spx = select(1, M.Spot(D))
 check("follows: the F9 spot is the final centre", near(spx, dx))
+-- Below: room under an element that belongs to it. Only the frame grows, downward; the centre stays.
+local x1, y1, w1, h1 = M.ScreenBox(V)
+local c1x, c1y = M.FinalCenter(V)
+V.Below = 36
+local x2, y2, w2, h2 = M.ScreenBox(V)
+local c2x, c2y = M.FinalCenter(V)
+check("below: the frame grows down only", x1 == x2 and y1 == y2 and w1 == w2 and near(h2 - h1, 36 * V.Scale * M.Hud.S))
+check("below: the centre stays", c1x == c2x and c1y == c2y)
+V.Below = nil
 
 -- 21:9: 2560 units wide. The bars follow the middle, the map the right edge, the rings the left edge.
 E = Fresh()

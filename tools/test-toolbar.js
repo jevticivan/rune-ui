@@ -19,7 +19,9 @@ function api:GetChildrenCount() return #self.kids end
 function api:GetChildAt(i) return self.kids[i + 1] end
 function api:GetVisibility() return self.vis end
 function api:GetParent() return self.parent end
-function api:SetVisibility(v) self.vis = v end
+function api:GetOuter() return self.outer end
+function api:GetRenderOpacity() if not self.valid then error("a call on a widget that is gone") end return self.op or 1 end
+function api:SetVisibility(v) if v ~= self.vis then self.draws = (self.draws or 0) + 1 end self.vis = v end   -- a change brings a new draw
 function api:SetRenderOpacity(o) self.op = o end
 function api:SetFont(f) self.font = f end
 function api:SetColorAndOpacity(c) self.colour = c.SpecifiedColor end
@@ -79,6 +81,16 @@ local function Slot(n, item)
 end
 local slots = { Slot(1, "staff"), Slot(2, "axe"), Slot(3, "food") }
 local bar = User("QuickAccessBar", "WBP_Inventory_QuickAccesBar_C", W("SlotGridContainer", "UniformGridPanel", slots))
+-- above the bar, as in the game: a box in the tree of the bag's content, and that in the main panel's tree
+local function Hold(name, cls, kid)
+    local box = W("Box", "VerticalBox", { kid })
+    local w = User(name, cls, box)
+    box.outer = w.WidgetTree
+    w.WidgetTree.outer = w
+    return w
+end
+local content = Hold("InventoryContent", "WBP_Inventory_VerticalNavigation_C", bar)
+local panel = Hold("MainPanel", "WBP_Inventory_MainPanel_C", content)
 local function T(i) return slots[i].ov.kids[1].t end   -- the inner slot's parts, as the game has them now
 local function Edges(i)
     local out = {}
@@ -119,6 +131,13 @@ check("a second look adds no second edge", #Edges(1) == 1 and #Edges(2) == 1 and
 T(2).eq.vis, T(1).eq.vis = 1, 4   -- the staff in the hand now
 Step()
 check("the bright edge follows the item in the hand", Edges(1)[1].set.Width == 2 and Edges(2)[1].set.Width == 1 and near(Edges(2)[1].set.Colour.A, 0.45))
+local d1, d2, d3 = Edges(1)[1].draws, Edges(2)[1].draws, Edges(3)[1].draws
+T(1).eq.vis, T(2).eq.vis = 1, 4   -- the axe again
+Step()
+check("an edge that changes its look is drawn again, and stays seen", Edges(1)[1].draws > d1 and Edges(2)[1].draws > d2 and Edges(1)[1].vis == 3 and Edges(2)[1].vis == 3)
+check("an edge that keeps its look is left alone", Edges(3)[1].draws == d3)
+T(2).eq.vis, T(1).eq.vis = 1, 4
+Step()
 
 T(1).pb.FillColorAndOpacity = { R = 0.9, G = 0.1, B = 0.05, A = 1 }   -- the game: this item breaks soon
 Step()
@@ -158,6 +177,29 @@ slots[1] = outer
 bar.WidgetTree.RootWidget.kids[1] = outer
 Step()
 check("a whole slot built new is painted", #Edges(1) == 1 and T(1).item == "bow" and slots[1].header.font.FontObject == "Poppins")
+
+-- the tool wheel is open: the game sets the main panel to opacity 0, and an outline does not take that by itself
+T(1).eq.vis = 4   -- the bow is in the hand
+panel.op = 0
+Step()
+check("the wheel open: no edge is seen, the thin one and the bright one", Edges(1)[1].set.Colour.A == 0 and Edges(2)[1].set.Colour.A == 0 and Edges(3)[1].set.Colour.A == 0)
+check("and every edge is hidden, not only see-through", Edges(1)[1].vis == 2 and Edges(2)[1].vis == 2 and Edges(3)[1].vis == 2)
+panel.op = 1
+Step()
+check("the wheel closed: the edges are back", near(Edges(1)[1].set.Colour.A, 1) and near(Edges(3)[1].set.Colour.A, 0.45) and Edges(1)[1].vis == 3 and Edges(3)[1].vis == 3)
+bar.op = 0.5   -- the render opacity that main.lua sets on a bar that is not selected in the editor
+Step()
+check("a dimmed bar: the edges are dimmed with it", near(Edges(3)[1].set.Colour.A, 0.225))
+bar.op = 1
+panel.valid = false   -- the game built the panel new, with the wheel open
+local panel2 = Hold("MainPanel", "WBP_Inventory_MainPanel_C", content)
+panel2.op = 0
+Step()
+Step()
+check("a panel built new is found, and no call goes to the old one", Edges(3)[1].set.Colour.A == 0 and said("not ") == 0)
+panel2.op = 1
+Step()
+check("and the edges are back with it", near(Edges(3)[1].set.Colour.A, 0.45))
 
 local before = made
 clock = clock + 0.05 M.Tick(ctx)
